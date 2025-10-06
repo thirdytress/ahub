@@ -4,17 +4,15 @@ require_once "../classes/database.php";
 
 $db = new Database();
 
-// --- require admin session (unified session keys) ---
+// --- require admin session ---
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
     header("Location: ../index.php");
     exit();
 }
 
-// --- prefer session fullname, otherwise try to fetch from DB ---
+// --- get fullname ---
 $fullname = $_SESSION['fullname'] ?? '';
-
 if (empty($fullname)) {
-    // attempt to fetch from admins table using user_id
     try {
         $conn = $db->connect();
         $stmt = $conn->prepare("SELECT fullname, username FROM admins WHERE admin_id = :id LIMIT 1");
@@ -23,15 +21,12 @@ if (empty($fullname)) {
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if ($row) {
             $fullname = $row['fullname'];
-            // update session for future requests
             $_SESSION['fullname'] = $fullname;
             if (empty($_SESSION['username']) && !empty($row['username'])) {
                 $_SESSION['username'] = $row['username'];
             }
         }
-    } catch (Exception $e) {
-        // fail silently but keep $fullname empty
-    }
+    } catch (Exception $e) {}
 }
 ?>
 <!DOCTYPE html>
@@ -40,10 +35,34 @@ if (empty($fullname)) {
   <meta charset="UTF-8">
   <title>Admin Dashboard | ApartmentHub</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
   <style>
     body { background-color: #f8f9fa; font-family: 'Poppins', sans-serif; }
     .navbar { box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-    .card { border: none; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border-radius: 10px; }
+    .card { border: none; border-radius: 10px; }
+
+    /* Dashboard Cards */
+    .dashboard-card {
+      transition: transform 0.3s ease, box-shadow 0.3s ease, background-color 0.3s ease;
+      cursor: pointer;
+    }
+
+    .dashboard-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+      background-color: #f0f8ff;
+    }
+
+    .dashboard-card .icon {
+      font-size: 2rem;
+      color: #0d6efd;
+      transition: transform 0.3s ease, color 0.3s ease;
+    }
+
+    .dashboard-card:hover .icon {
+      transform: scale(1.2);
+      color: #0b5ed7;
+    }
   </style>
 </head>
 <body>
@@ -63,13 +82,59 @@ if (empty($fullname)) {
     <hr>
     <p>This is your admin dashboard. You can manage tenants, applications, and apartment listings here.</p>
 
-    <div class="mt-4">
-      <a href="#" class="btn btn-primary me-2">Manage Tenants</a>
-      <a href="#" class="btn btn-outline-primary">View Applications</a>
-      <a href="change_password.php" class="btn btn-warning">Change Password</a>
+    <div class="row mt-4">
+      <!-- Manage Tenants -->
+      <div class="col-md-3 mb-3">
+        <div class="card text-center h-100 p-3 shadow-sm dashboard-card">
+          <div class="mb-2">
+            <i class="bi bi-people-fill icon"></i>
+          </div>
+          <h5>Manage Tenants</h5>
+          <p class="small text-muted">View and manage all tenant accounts.</p>
+          <a href="manage_tenants.php" class="btn btn-primary btn-sm mt-auto">Go</a>
+        </div>
+      </div>
+
+      <!-- View Applications -->
+      <div class="col-md-3 mb-3">
+        <div class="card text-center h-100 p-3 shadow-sm dashboard-card">
+          <div class="mb-2">
+            <i class="bi bi-file-earmark-text-fill icon"></i>
+          </div>
+          <h5>View Applications</h5>
+          <p class="small text-muted">Check tenant apartment applications.</p>
+          <a href="view_applications.php" class="btn btn-outline-primary btn-sm mt-auto">Go</a>
+        </div>
+      </div>
+
+      <!-- Add Apartment -->
+      <div class="col-md-3 mb-3">
+        <div class="card text-center h-100 p-3 shadow-sm dashboard-card">
+          <div class="mb-2">
+            <i class="bi bi-building-fill icon"></i>
+          </div>
+          <h5>Add Apartment</h5>
+          <p class="small text-muted">Add new apartment listings to the system.</p>
+          <a href="add_apartment.php" class="btn btn-success btn-sm mt-auto">Go</a>
+        </div>
+      </div>
+
+      <!-- Change Password -->
+      <div class="col-md-3 mb-3">
+        <div class="card text-center h-100 p-3 shadow-sm dashboard-card">
+          <div class="mb-2">
+            <i class="bi bi-key-fill icon"></i>
+          </div>
+          <h5>Change Password</h5>
+          <p class="small text-muted">Update your account password securely.</p>
+          <a href="change_password.php" class="btn btn-warning btn-sm mt-auto">Go</a>
+        </div>
+      </div>
     </div>
+
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

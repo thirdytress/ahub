@@ -2,12 +2,13 @@
 session_start();
 require_once "../classes/database.php";
 
-if (!isset($_SESSION['admin_id'])) {
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
     header("Location: ../index.php");
     exit();
 }
 
 $db = new Database();
+$admin_id = $_SESSION['user_id'];
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $current_password = trim($_POST['current_password']);
@@ -16,7 +17,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
     $conn = $db->connect();
     $stmt = $conn->prepare("SELECT password FROM admins WHERE admin_id = :id");
-    $stmt->bindParam(':id', $_SESSION['admin_id']);
+    $stmt->bindParam(':id', $admin_id);
     $stmt->execute();
     $admin = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -33,11 +34,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $hashed = password_hash($new_password, PASSWORD_DEFAULT);
     $update = $conn->prepare("UPDATE admins SET password = :password WHERE admin_id = :id");
     $update->bindParam(':password', $hashed);
-    $update->bindParam(':id', $_SESSION['admin_id']);
+    $update->bindParam(':id', $admin_id);
     $update->execute();
 
     echo "<script>alert('Password changed successfully!'); window.location.href='dashboard.php';</script>";
 }
+
 ?>
 
 <!DOCTYPE html>

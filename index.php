@@ -1,3 +1,14 @@
+<?php
+require_once "classes/database.php";
+$db = new Database();
+$conn = $db->connect();
+
+// Fetch only available apartments
+$stmt = $conn->prepare("SELECT * FROM apartments WHERE Status = 'Available' ORDER BY DateAdded DESC");
+$stmt->execute();
+$apartments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -26,6 +37,10 @@
       font-size: 1.1rem;
       color: #333;
     }
+    .apartment-card img {
+      height: 200px;
+      object-fit: cover;
+    }
     .modal-header {
       background: #0d6efd;
       color: #fff;
@@ -45,7 +60,7 @@
 </head>
 <body>
 
-<!-- 🧭 NAVBAR -->
+<!-- NAVBAR -->
 <nav class="navbar navbar-expand-lg bg-white sticky-top">
   <div class="container">
     <a class="navbar-brand fw-bold text-primary" href="#">ApartmentHub</a>
@@ -63,7 +78,7 @@
   </div>
 </nav>
 
-<!-- 🏠 HERO SECTION -->
+<!-- HERO -->
 <section class="hero">
   <div class="container">
     <h1>Welcome to ApartmentHub</h1>
@@ -72,7 +87,34 @@
   </div>
 </section>
 
-<!-- 🔐 LOGIN MODAL -->
+<!-- APARTMENTS -->
+<section class="container mt-5">
+  <h2 class="mb-4 text-primary">Available Apartments</h2>
+  <div class="row">
+    <?php if ($apartments): ?>
+      <?php foreach ($apartments as $apt): ?>
+        <div class="col-md-4 mb-4">
+          <div class="card apartment-card h-100 shadow-sm">
+            <?php if ($apt['Image']): ?>
+              <img src="<?= htmlspecialchars($apt['Image']) ?>" class="card-img-top" alt="<?= htmlspecialchars($apt['Name']) ?>">
+            <?php endif; ?>
+            <div class="card-body d-flex flex-column">
+              <h5 class="card-title"><?= htmlspecialchars($apt['Name']) ?></h5>
+              <p class="card-text"><?= htmlspecialchars($apt['Description']) ?></p>
+              <p class="card-text"><strong>Monthly Rate:</strong> $<?= number_format($apt['MonthlyRate'],2) ?></p>
+              <a href="apply_apartment.php?apartment_id=<?= $apt['ApartmentID']; ?>" class="btn btn-success btn-sm">Apply Now</a>
+
+            </div>
+          </div>
+        </div>
+      <?php endforeach; ?>
+    <?php else: ?>
+      <p class="text-muted">No apartments are currently available. Please check back later.</p>
+    <?php endif; ?>
+  </div>
+</section>
+
+<!-- LOGIN MODAL -->
 <div class="modal fade" id="loginModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -105,7 +147,7 @@
   </div>
 </div>
 
-<!-- 📝 REGISTER MODAL (Tenant Only) -->
+<!-- REGISTER MODAL -->
 <div class="modal fade" id="registerModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">

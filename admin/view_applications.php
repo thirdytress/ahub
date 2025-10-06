@@ -1,0 +1,145 @@
+<?php
+session_start();
+require_once "../classes/database.php";
+
+// --- Require admin session ---
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
+    header("Location: ../index.php");
+    exit();
+}
+
+$db = new Database();
+$conn = $db->connect();
+
+// --- Handle Approve / Reject actions ---
+if (isset($_GET['action'], $_GET['id']) && in_array($_GET['action'], ['approve','reject'])) {
+    $application_id = intval($_GET['id']);
+
+    // Get the application
+    $stmt = $conn->prepare("SELECT * FROM applications WHERE application_id = :id");
+    $stmt->bindParam(':id', $application_id);
+    $stmt->execute();
+    $application = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($application) {
+        if ($_GET['action'] === 'approve') {
+            // 1️⃣ Update application status
+            $stmt = $conn->prepare("UPDATE applications SET status='Approved' WHERE application_id=:id");
+            $stmt->bindParam(':id', $application_id);
+            $stmt->execute();
+
+            // 2️⃣ Update apartment status to Occupied
+            $stmt = $conn->prepare("UPDATE apartments SET Status='Occupied' WHERE ApartmentID=:apt_id");
+            $stmt->bindParam(':apt_id', $application['apartment_id']);
+            $stmt->execute();
+
+            // 3️⃣ Optional: reject all other applications for same apartment
+            $stmt = $conn->prepare("UPDATE applications SET status='Rejected' WHERE apartment_id=:apt_id AND application_id!=:app_id");
+            $stmt->bindParam(':apt_id', $application['apartment_id']);
+            $stmt->bindParam(':app_id', $application_id);
+            $stmt->execute();
+
+            header("Location: view_applications.php");
+            exit();
+        } elseif ($_GET['action'] === 'reject') {
+            $stmt = $conn->prepare("UPDATE applications SET status='Rejected' WHERE application_id=:id");
+            $stmt->bindParam(':id', $application_id);
+            $stmt->execute();
+            header("Location: view_applications.php");
+            exit();
+        }
+    }
+}
+
+// --- Fetch all applications with tenant & apartment info ---
+$stmt = $conn->prepare("
+    SELECT a.application_id, a.status as app_status, a.date_applied, 
+           t.firstname, t.lastname, t.username as tenant_username,
+           p.Name as apartment_name, p.Location
+    FROM applications a
+    JOIN tenants t ON a.tenant_id = t.tenant_id
+    JOIN apartments p ON a.apartment_id = p.ApartmentID
+    ORDER BY a.date_applied DESC
+");
+$stmt->execute();
+$applications = $stmt->fetchAll(PDO::FETCH_ASSOC);
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>View Applications | Admin</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+body { background-color: #f8f9fa; font-family: 'Poppins', sans-serif; }
+.navbar { box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+.card { border: none; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+</style>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg bg-white mb-4">
+  <div class="container">
+    <a class="navbar-brand fw-bold text-primary" href="dashboard.php">ApartmentHub Admin</a>
+    <div class="d-flex">
+      <a href="../logout.php" class="btn btn-outline-danger btn-sm">Logout</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+  <h3 class="text-primary mb-4">Tenant Apartment Applications</h3>
+
+  <?php if ($applications): ?>
+  <div class="table-responsive">
+    <table class="table table-bordered table-hover bg-white">
+      <thead class="table-light">
+        <tr>
+          <th>#</th>
+          <th>Tenant</th>
+          <th>Apartment</th>
+          <th>Location</th>
+          <th>Date Applied</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php foreach ($applications as $i => $app): ?>
+        <tr>
+          <td><?= $i+1 ?></td>
+          <td><?= htmlspecialchars($app['firstname'] . ' ' . $app['lastname']) ?> (<?= htmlspecialchars($app['tenant_username']) ?>)</td>
+          <td><?= htmlspecialchars($app['apartment_name']) ?></td>
+          <td><?= htmlspecialchars($app['Location']) ?></td>
+          <td><?= date('M d, Y H:i', strtotime($app['date_applied'])) ?></td>
+          <td>
+            <?php if ($app['app_status'] === 'Pending'): ?>
+              <span class="badge bg-warning text-dark">Pending</span>
+            <?php elseif ($app['app_status'] === 'Approved'): ?>
+              <span class="badge bg-success">Approved</span>
+            <?php else: ?>
+              <span class="badge bg-danger">Rejected</span>
+            <?php endif; ?>
+          </td>
+          <td>
+            <?php if ($app['app_status'] === 'Pending'): ?>
+              <a href="?action=approve&id=<?= $app['application_id'] ?>" class="btn btn-success btn-sm mb-1">Approve</a>
+              <a href="?action=reject&id=<?= $app['application_id'] ?>" class="btn btn-danger btn-sm">Reject</a>
+            <?php else: ?>
+              <span class="text-muted">No action</span>
+            <?php endif; ?>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+  <?php else: ?>
+    <p class="text-muted">No applications found.</p>
+  <?php endif; ?>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
