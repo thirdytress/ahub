@@ -1,0 +1,77 @@
+<?php
+session_start();
+require_once "../classes/database.php";
+
+if (!isset($_SESSION['admin_id'])) {
+    header("Location: ../index.php");
+    exit();
+}
+
+$db = new Database();
+
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+    $current_password = trim($_POST['current_password']);
+    $new_password = trim($_POST['new_password']);
+    $confirm_password = trim($_POST['confirm_password']);
+
+    $conn = $db->connect();
+    $stmt = $conn->prepare("SELECT password FROM admins WHERE admin_id = :id");
+    $stmt->bindParam(':id', $_SESSION['admin_id']);
+    $stmt->execute();
+    $admin = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$admin || !password_verify($current_password, $admin['password'])) {
+        echo "<script>alert('Current password is incorrect.'); window.history.back();</script>";
+        exit();
+    }
+
+    if ($new_password !== $confirm_password) {
+        echo "<script>alert('New passwords do not match.'); window.history.back();</script>";
+        exit();
+    }
+
+    $hashed = password_hash($new_password, PASSWORD_DEFAULT);
+    $update = $conn->prepare("UPDATE admins SET password = :password WHERE admin_id = :id");
+    $update->bindParam(':password', $hashed);
+    $update->bindParam(':id', $_SESSION['admin_id']);
+    $update->execute();
+
+    echo "<script>alert('Password changed successfully!'); window.location.href='dashboard.php';</script>";
+}
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Change Password | Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+<div class="container mt-5">
+    <div class="card shadow col-md-6 mx-auto">
+        <div class="card-header bg-primary text-white">
+            <h4 class="mb-0">Change Password</h4>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="">
+                <div class="mb-3">
+                    <label>Current Password</label>
+                    <input type="password" name="current_password" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                    <label>New Password</label>
+                    <input type="password" name="new_password" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                    <label>Confirm New Password</label>
+                    <input type="password" name="confirm_password" class="form-control" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Update Password</button>
+                <a href="dashboard.php" class="btn btn-secondary w-100 mt-2">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+</body>
+</html>
