@@ -33,12 +33,16 @@ if (isset($_GET['action'], $_GET['id']) && in_array($_GET['action'], ['approve',
             $stmt->bindParam(':apt_id', $application['apartment_id']);
             $stmt->execute();
 
-            // 3️⃣ Optional: reject all other applications for same apartment
+            // 3️⃣ Reject other applications for the same apartment
             $stmt = $conn->prepare("UPDATE applications SET status='Rejected' WHERE apartment_id=:apt_id AND application_id!=:app_id");
             $stmt->bindParam(':apt_id', $application['apartment_id']);
             $stmt->bindParam(':app_id', $application_id);
             $stmt->execute();
 
+            // 4️⃣ Create Lease automatically
+            $db->createLease($application['tenant_id'], $application['apartment_id']);
+
+            // Redirect back
             header("Location: view_applications.php");
             exit();
         } elseif ($_GET['action'] === 'reject') {
@@ -71,6 +75,7 @@ $applications = $stmt->fetchAll(PDO::FETCH_ASSOC);
 <meta charset="UTF-8">
 <title>View Applications | Admin</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
 <style>
 body { background-color: #f8f9fa; font-family: 'Poppins', sans-serif; }
 .navbar { box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -93,7 +98,7 @@ body { background-color: #f8f9fa; font-family: 'Poppins', sans-serif; }
 
   <?php if ($applications): ?>
   <div class="table-responsive">
-    <table class="table table-bordered table-hover bg-white">
+    <table class="table table-bordered table-hover bg-white align-middle">
       <thead class="table-light">
         <tr>
           <th>#</th>

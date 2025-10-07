@@ -129,25 +129,48 @@ public function getAllApartments() {
 }
 
 // --- Tenant Apply for Apartment ---
+// --- Tenant Apply for Apartment ---
 public function applyApartment($tenant_id, $apartment_id) {
     $conn = $this->connect();
 
-    // check if already applied
-    $check = $conn->prepare("SELECT * FROM applications WHERE tenant_id = :tenant AND apartment_id = :apartment");
-    $check->bindParam(':tenant', $tenant_id);
-    $check->bindParam(':apartment', $apartment_id);
-    $check->execute();
+    // 1️⃣ Check if apartment exists and is available
+    $stmt = $conn->prepare("SELECT Status FROM apartments WHERE ApartmentID = :apt_id LIMIT 1");
+    $stmt->bindParam(':apt_id', $apartment_id);
+    $stmt->execute();
+    $apt = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if ($check->rowCount() > 0) {
+    if (!$apt) {
+        return "Apartment not found.";
+    }
+
+    if ($apt['Status'] !== 'Available') {
+        return "This apartment is not available.";
+    }
+
+    // 2️⃣ Check if tenant already applied or already approved
+    $stmt = $conn->prepare("
+        SELECT * FROM applications 
+        WHERE tenant_id = :tenant_id AND apartment_id = :apt_id AND status IN ('Pending','Approved')
+    ");
+    $stmt->bindParam(':tenant_id', $tenant_id);
+    $stmt->bindParam(':apt_id', $apartment_id);
+    $stmt->execute();
+
+    if ($stmt->rowCount() > 0) {
         return "You have already applied for this apartment.";
     }
 
-    $stmt = $conn->prepare("INSERT INTO applications (tenant_id, apartment_id, status)
-                            VALUES (:tenant, :apartment, 'Pending')");
-    $stmt->bindParam(':tenant', $tenant_id);
-    $stmt->bindParam(':apartment', $apartment_id);
-    return $stmt->execute() ? true : "Failed to apply.";
+    // 3️⃣ Insert new application
+    $stmt = $conn->prepare("
+        INSERT INTO applications (tenant_id, apartment_id, status, date_applied)
+        VALUES (:tenant_id, :apt_id, 'Pending', NOW())
+    ");
+    $stmt->bindParam(':tenant_id', $tenant_id);
+    $stmt->bindParam(':apt_id', $apartment_id);
+
+    return $stmt->execute() ? true : "Failed to submit application.";
 }
+
 
 // --- Admin Get All Applications ---
 public function getAllApplications() {
@@ -171,5 +194,65 @@ public function updateApplicationStatus($application_id, $status) {
     $stmt->bindParam(':id', $application_id);
     return $stmt->execute();
 }
+
+public function getAvailableApartments($tenant_id) {
+    $conn = $this->connect();
+
+    $stmt = $conn->prepare("
+        SELECT * FROM apartments 
+        WHERE Status = 'Available'
+        AND ApartmentID NOT IN (
+            SELECT apartment_id FROM applications 
+            WHERE tenant_id = :tenant_id AND status IN ('Pending','Approved')
+        )
+        ORDER BY DateAdded DESC
+    ");
+    $stmt->bindParam(':tenant_id', $tenant_id);
+    $stmt->execute();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+
+public function getTenantLeases($tenant_id) {
+    $conn = $this->connect();
+
+    $stmt = $conn->prepare("
+        SELECT l.lease_id, l.start_date, l.end_date, 
+               a.Name AS apartment_name, a.Location, a.MonthlyRate
+        FROM leases l
+        JOIN apartments a ON l.apartment_id = a.ApartmentID
+        WHERE l.tenant_id = :tenant_id
+        ORDER BY l.start_date DESC
+    ");
+    $stmt->bindParam(':tenant_id', $tenant_id);
+    $stmt->execute();
+
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+// --- Add Lease when application is approved
+// --- Add Lease for Tenant ---
+public function createLease($tenant_id, $apartment_id, $start_date = null, $end_date = null) {
+    $conn = $this->connect();
+
+    // Default: lease starts today and lasts 1 year if not provided
+    if (!$start_date) $start_date = date('Y-m-d');
+    if (!$end_date) $end_date = date('Y-m-d', strtotime('+1 year'));
+
+    $stmt = $conn->prepare("
+        INSERT INTO leases (tenant_id, apartment_id, start_date, end_date)
+        VALUES (:tenant_id, :apartment_id, :start_date, :end_date)
+    ");
+    $stmt->bindParam(':tenant_id', $tenant_id);
+    $stmt->bindParam(':apartment_id', $apartment_id);
+    $stmt->bindParam(':start_date', $start_date);
+    $stmt->bindParam(':end_date', $end_date);
+
+    return $stmt->execute();
+}
+
+
+
+
 }
 ?>

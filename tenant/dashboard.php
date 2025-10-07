@@ -16,7 +16,7 @@ $phone = htmlspecialchars($tenant['phone']);
 $conn = $db->connect();
 
 // --- Fetch available apartments ---
-$stmt = $conn->prepare("SELECT * FROM apartments WHERE Status='Available' ORDER BY DateAdded DESC");
+$stmt = $conn->prepare("SELECT * FROM apartments ORDER BY DateAdded DESC");
 $stmt->execute();
 $apartments = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -32,6 +32,19 @@ $stmt = $conn->prepare("
 $stmt->bindParam(':tenant_id', $_SESSION['user_id']);
 $stmt->execute();
 $applications = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// --- Fetch tenant leases ---
+$leases = $db->getTenantLeases($_SESSION['user_id']);
+
+// --- Determine if tenant has active lease ---
+$hasActiveLease = false;
+foreach ($leases as $lease) {
+    $today = date('Y-m-d');
+    if ($today >= $lease['start_date'] && $today <= $lease['end_date']) {
+        $hasActiveLease = true;
+        break;
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -59,6 +72,7 @@ body { background-color: #f8f9fa; font-family: 'Poppins', sans-serif; }
       <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
         <li class="nav-item"><a class="nav-link active" href="#">Dashboard</a></li>
         <li class="nav-item"><a class="nav-link" href="#myApplications">My Applications</a></li>
+        <li class="nav-item"><a class="nav-link" href="#myLeases">My Leases</a></li>
         <li class="nav-item"><a class="nav-link" href="#profile">Profile</a></li>
         <li class="nav-item"><a href="../logout.php" class="btn btn-outline-danger btn-sm ms-2">Logout</a></li>
       </ul>
@@ -67,14 +81,16 @@ body { background-color: #f8f9fa; font-family: 'Poppins', sans-serif; }
 </nav>
 
 <div class="container mt-4">
+
   <div class="card p-4 mb-4">
     <h3 class="text-primary">Welcome, <?= $fullname; ?>!</h3>
     <hr>
-    <p>This is your tenant dashboard. You can browse available apartments and track your applications here.</p>
+    <p>This is your tenant dashboard. You can browse available apartments, track your applications, and view your leases here.</p>
 
     <div class="mt-3">
       <a href="#availableApartments" class="btn btn-primary me-2">View Apartments</a>
-      <a href="#myApplications" class="btn btn-outline-primary">My Applications</a>
+      <a href="#myApplications" class="btn btn-outline-primary me-2">My Applications</a>
+      <a href="#myLeases" class="btn btn-outline-success">My Leases</a>
     </div>
   </div>
 
@@ -88,8 +104,12 @@ body { background-color: #f8f9fa; font-family: 'Poppins', sans-serif; }
           <div class="card h-100 p-3">
             <h5><?= htmlspecialchars($apt['Name']); ?></h5>
             <p class="mb-1"><strong>Location:</strong> <?= htmlspecialchars($apt['Location']); ?></p>
-            <p class="mb-1"><strong>Rate:</strong> $<?= number_format($apt['MonthlyRate'],2); ?>/month</p>
-            <a href="apply_apartment.php?apartment_id=<?= $apt['ApartmentID']; ?>" class="btn btn-success btn-sm">Apply Now</a>
+            <p class="mb-1"><strong>Rate:</strong> ₱<?= number_format($apt['MonthlyRate'],2); ?>/month</p>
+            <?php if ($hasActiveLease): ?>
+                <button class="btn btn-secondary btn-sm w-100" disabled>Apply Disabled (Active Lease)</button>
+            <?php else: ?>
+                <a href="apply_apartment.php?apartment_id=<?= $apt['ApartmentID']; ?>" class="btn btn-success btn-sm w-100">Apply Now</a>
+            <?php endif; ?>
           </div>
         </div>
         <?php endforeach; ?>
@@ -121,7 +141,7 @@ body { background-color: #f8f9fa; font-family: 'Poppins', sans-serif; }
               <td><?= $i+1 ?></td>
               <td><?= htmlspecialchars($app['apartment_name']) ?></td>
               <td><?= htmlspecialchars($app['Location']) ?></td>
-              <td>$<?= number_format($app['MonthlyRate'],2) ?></td>
+              <td>₱<?= number_format($app['MonthlyRate'],2) ?></td>
               <td><?= date('M d, Y H:i', strtotime($app['date_applied'])) ?></td>
               <td>
                 <?php if ($app['app_status'] === 'Pending'): ?>
@@ -139,6 +159,41 @@ body { background-color: #f8f9fa; font-family: 'Poppins', sans-serif; }
       </div>
     <?php else: ?>
       <p class="text-muted">You haven't applied to any apartments yet.</p>
+    <?php endif; ?>
+  </div>
+
+  <!-- MY LEASES -->
+  <div id="myLeases" class="card p-4 mb-4">
+    <h4 class="text-secondary mb-3">My Leases</h4>
+    <?php if ($leases): ?>
+      <div class="table-responsive">
+        <table class="table table-bordered table-hover">
+          <thead class="table-light">
+            <tr>
+              <th>#</th>
+              <th>Apartment</th>
+              <th>Location</th>
+              <th>Monthly Rate</th>
+              <th>Start Date</th>
+              <th>End Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php foreach ($leases as $i => $lease): ?>
+            <tr>
+              <td><?= $i+1 ?></td>
+              <td><?= htmlspecialchars($lease['apartment_name']) ?></td>
+              <td><?= htmlspecialchars($lease['Location']) ?></td>
+              <td>₱<?= number_format($lease['MonthlyRate'],2) ?></td>
+              <td><?= date('M d, Y', strtotime($lease['start_date'])) ?></td>
+              <td><?= date('M d, Y', strtotime($lease['end_date'])) ?></td>
+            </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+    <?php else: ?>
+      <p class="text-muted">You currently have no active leases.</p>
     <?php endif; ?>
   </div>
 
@@ -176,6 +231,7 @@ body { background-color: #f8f9fa; font-family: 'Poppins', sans-serif; }
       <button type="submit" class="btn btn-success">Update Profile</button>
     </form>
   </div>
+
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>

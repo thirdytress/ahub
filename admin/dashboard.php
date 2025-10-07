@@ -132,6 +132,19 @@ if (empty($fullname)) {
       </div>
     </div>
 
+    <!-- Leases -->
+    <div class="col-md-3 mb-3">
+    <div class="card text-center h-100 p-3 shadow-sm dashboard-card">
+      <div class="mb-2">
+        <i class="bi bi-file-text-fill icon"></i>
+      </div>
+      <h5>View Leases</h5>
+      <p class="small text-muted">See all active leases in the system.</p>
+      <a href="view_leases.php" class="btn btn-info btn-sm mt-auto">Go</a>
+    </div>
+</div>
+
+
   </div>
 </div>
 
