@@ -10,37 +10,27 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
 $db = new Database();
 $admin_id = $_SESSION['user_id'];
 
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $current_password = trim($_POST['current_password']);
     $new_password = trim($_POST['new_password']);
     $confirm_password = trim($_POST['confirm_password']);
 
-    $conn = $db->connect();
-    $stmt = $conn->prepare("SELECT password FROM admins WHERE admin_id = :id");
-    $stmt->bindParam(':id', $admin_id);
-    $stmt->execute();
-    $admin = $stmt->fetch(PDO::FETCH_ASSOC);
-
+    $admin = $db->getAdminById($admin_id);
     if (!$admin || !password_verify($current_password, $admin['password'])) {
-        echo "<script>alert('Current password is incorrect.'); window.history.back();</script>";
-        exit();
+        echo "<script>alert('Current password is incorrect.'); window.history.back();</script>"; exit();
     }
 
     if ($new_password !== $confirm_password) {
-        echo "<script>alert('New passwords do not match.'); window.history.back();</script>";
-        exit();
+        echo "<script>alert('New passwords do not match.'); window.history.back();</script>"; exit();
     }
 
-    $hashed = password_hash($new_password, PASSWORD_DEFAULT);
-    $update = $conn->prepare("UPDATE admins SET password = :password WHERE admin_id = :id");
-    $update->bindParam(':password', $hashed);
-    $update->bindParam(':id', $admin_id);
-    $update->execute();
-
+    $db->changeAdminPassword($admin_id, password_hash($new_password, PASSWORD_DEFAULT));
     echo "<script>alert('Password changed successfully!'); window.location.href='dashboard.php';</script>";
 }
-
 ?>
+<!-- HTML form remains the same -->
+
+
 
 <!DOCTYPE html>
 <html lang="en">

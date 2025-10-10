@@ -8,23 +8,17 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
 }
 
 $db = new Database();
-$conn = $db->connect();
 
-// Handle delete action
 if (isset($_GET['delete_id'])) {
-    $delete_id = (int) $_GET['delete_id'];
-    $stmt = $conn->prepare("DELETE FROM tenants WHERE tenant_id = :id");
-    $stmt->bindParam(':id', $delete_id);
-    $stmt->execute();
+    $db->deleteTenant($_GET['delete_id']);
     echo "<script>alert('Tenant deleted successfully!'); window.location.href='manage_tenants.php';</script>";
-    exit();
 }
 
-// Fetch all tenants
-$stmt = $conn->prepare("SELECT * FROM tenants ORDER BY created_at DESC");
-$stmt->execute();
-$tenants = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$tenants = $db->getAllTenants();
 ?>
+<!-- HTML table remains the same -->
+
+
 
 <!DOCTYPE html>
 <html lang="en">

@@ -1,16 +1,12 @@
 <?php
 require_once "../classes/database.php";
 $db = new Database();
-
-// ✅ Secret key para ikaw lang ang makaka-access
 $secretKey = "supersecret123";
 
-// ❌ Kapag walang key o mali ang key, i-block agad
 if (!isset($_GET['key']) || $_GET['key'] !== $secretKey) {
     die("<h2 style='color:red; text-align:center;'>Access Denied 🔒</h2>");
 }
 
-// ✅ Handle admin registration
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fullname = trim($_POST['fullname']);
     $username = trim($_POST['username']);
@@ -20,33 +16,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($password !== $confirm) {
         echo "<script>alert('Passwords do not match!');</script>";
+    } elseif ($db->checkAdminExists($username, $email)) {
+        echo "<script>alert('Username or email already exists!');</script>";
     } else {
-        $conn = $db->connect();
-        $check = $conn->prepare("SELECT * FROM admins WHERE username = :username OR email = :email");
-        $check->bindParam(':username', $username);
-        $check->bindParam(':email', $email);
-        $check->execute();
-
-        if ($check->rowCount() > 0) {
-            echo "<script>alert('Username or email already exists!');</script>";
+        $hashed = password_hash($password, PASSWORD_DEFAULT);
+        if ($db->registerAdmin($fullname, $username, $email, $hashed)) {
+            echo "<script>alert('Admin registered successfully!'); window.location.href='dashboard.php';</script>";
         } else {
-            $hashed = password_hash($password, PASSWORD_DEFAULT);
-            $stmt = $conn->prepare("INSERT INTO admins (fullname, username, email, password)
-                                    VALUES (:fullname, :username, :email, :password)");
-            $stmt->bindParam(':fullname', $fullname);
-            $stmt->bindParam(':username', $username);
-            $stmt->bindParam(':email', $email);
-            $stmt->bindParam(':password', $hashed);
-
-            if ($stmt->execute()) {
-                echo "<script>alert('Admin registered successfully!'); window.location.href='dashboard.php';</script>";
-            } else {
-                echo "<script>alert('Registration failed. Try again.');</script>";
-            }
+            echo "<script>alert('Registration failed. Try again.');</script>";
         }
     }
 }
 ?>
+<!-- HTML form remains the same -->
+
 
 <!DOCTYPE html>
 <html lang="en">

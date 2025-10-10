@@ -1,36 +1,38 @@
 <?php
 session_start();
 require_once "../classes/database.php";
-$db = new Database();
 
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'tenant') {
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'tenant') {
     header("Location: ../index.php");
     exit();
 }
 
-// --- Available Apartments ---
-$apartments = $db->getAvailableApartments($_SESSION['user_id']);
+$db = new Database();
+$tenant_id = $_SESSION['user_id'];
+$apartments = $db->getAvailableApartments($tenant_id);
+$leases = $db->getTenantLeases($tenant_id);
 $message = "";
 
-// Handle application submission
+// Handle apartment application
 if (isset($_GET['apply'])) {
     $apartment_id = intval($_GET['apply']);
-    $result = $db->applyApartment($_SESSION['user_id'], $apartment_id);
-    $message = $result === true ? "Application submitted!" : $result;
+    $result = $db->applyApartment($tenant_id, $apartment_id);
 
-    // Refresh apartments list after applying
-    $apartments = $db->getAvailableApartments($_SESSION['user_id']);
+    if ($result === true) {
+        $message = "✅ Application submitted successfully!";
+    } else {
+        $message = "⚠️ " . $result;
+    }
+
+    // Refresh available apartments after applying
+    $apartments = $db->getAvailableApartments($tenant_id);
 }
-
-// --- Current Leases ---
-$leases = $db->getTenantLeases($_SESSION['user_id']);
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Tenant Dashboard | ApartmentHub</title>
+    <title>Available Apartments | ApartmentHub</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { background-color: #f8f9fa; font-family: 'Poppins', sans-serif; }
@@ -41,9 +43,11 @@ $leases = $db->getTenantLeases($_SESSION['user_id']);
 <div class="container mt-5">
 
     <h2 class="text-primary mb-4">Available Apartments</h2>
+
     <?php if ($message): ?>
         <div class="alert alert-info"><?= htmlspecialchars($message) ?></div>
     <?php endif; ?>
+
     <div class="row mb-5">
         <?php if ($apartments): ?>
             <?php foreach ($apartments as $a): ?>
@@ -62,7 +66,7 @@ $leases = $db->getTenantLeases($_SESSION['user_id']);
                 </div>
             <?php endforeach; ?>
         <?php else: ?>
-            <p class="text-muted">No available apartments at the moment.</p>
+            <p class="text-muted">No available apartments right now.</p>
         <?php endif; ?>
     </div>
 
@@ -83,7 +87,7 @@ $leases = $db->getTenantLeases($_SESSION['user_id']);
                 <tbody>
                     <?php foreach ($leases as $i => $l): ?>
                         <tr>
-                            <td><?= $i+1 ?></td>
+                            <td><?= $i + 1 ?></td>
                             <td><?= htmlspecialchars($l['apartment_name']) ?></td>
                             <td><?= htmlspecialchars($l['Location']) ?></td>
                             <td>₱<?= number_format($l['MonthlyRate'], 2) ?></td>
@@ -95,10 +99,9 @@ $leases = $db->getTenantLeases($_SESSION['user_id']);
             </table>
         </div>
     <?php else: ?>
-        <p class="text-muted">You currently have no active leases.</p>
+        <p class="text-muted">You have no active leases.</p>
     <?php endif; ?>
 
 </div>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

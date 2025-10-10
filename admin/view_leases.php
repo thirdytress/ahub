@@ -2,28 +2,17 @@
 session_start();
 require_once "../classes/database.php";
 
-// --- Require admin session ---
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
     header("Location: ../index.php");
     exit();
 }
 
 $db = new Database();
-$conn = $db->connect();
-
-// --- Fetch all active leases with tenant & apartment info ---
-$stmt = $conn->prepare("
-    SELECT l.lease_id, l.start_date, l.end_date, 
-           t.firstname, t.lastname, t.username AS tenant_username,
-           p.Name AS apartment_name, p.Location, p.MonthlyRate
-    FROM leases l
-    JOIN tenants t ON l.tenant_id = t.tenant_id
-    JOIN apartments p ON l.apartment_id = p.ApartmentID
-    ORDER BY l.start_date DESC
-");
-$stmt->execute();
-$leases = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$leases = $db->getAllLeases();
 ?>
+<!-- HTML table remains the same -->
+
+
 
 <!DOCTYPE html>
 <html lang="en">

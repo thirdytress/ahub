@@ -2,72 +2,25 @@
 session_start();
 require_once "../classes/database.php";
 
-// --- Require admin session ---
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
     header("Location: ../index.php");
     exit();
 }
 
 $db = new Database();
-$conn = $db->connect();
 
-// --- Handle Approve / Reject actions ---
-if (isset($_GET['action'], $_GET['id']) && in_array($_GET['action'], ['approve','reject'])) {
-    $application_id = intval($_GET['id']);
-
-    // Get the application
-    $stmt = $conn->prepare("SELECT * FROM applications WHERE application_id = :id");
-    $stmt->bindParam(':id', $application_id);
-    $stmt->execute();
-    $application = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    if ($application) {
-        if ($_GET['action'] === 'approve') {
-            // 1️⃣ Update application status
-            $stmt = $conn->prepare("UPDATE applications SET status='Approved' WHERE application_id=:id");
-            $stmt->bindParam(':id', $application_id);
-            $stmt->execute();
-
-            // 2️⃣ Update apartment status to Occupied
-            $stmt = $conn->prepare("UPDATE apartments SET Status='Occupied' WHERE ApartmentID=:apt_id");
-            $stmt->bindParam(':apt_id', $application['apartment_id']);
-            $stmt->execute();
-
-            // 3️⃣ Reject other applications for the same apartment
-            $stmt = $conn->prepare("UPDATE applications SET status='Rejected' WHERE apartment_id=:apt_id AND application_id!=:app_id");
-            $stmt->bindParam(':apt_id', $application['apartment_id']);
-            $stmt->bindParam(':app_id', $application_id);
-            $stmt->execute();
-
-            // 4️⃣ Create Lease automatically
-            $db->createLease($application['tenant_id'], $application['apartment_id']);
-
-            // Redirect back
-            header("Location: view_applications.php");
-            exit();
-        } elseif ($_GET['action'] === 'reject') {
-            $stmt = $conn->prepare("UPDATE applications SET status='Rejected' WHERE application_id=:id");
-            $stmt->bindParam(':id', $application_id);
-            $stmt->execute();
-            header("Location: view_applications.php");
-            exit();
-        }
-    }
+if (isset($_GET['action'], $_GET['id'])) {
+    $id = intval($_GET['id']);
+    if ($_GET['action'] === 'approve') $db->approveApplication($id);
+    elseif ($_GET['action'] === 'reject') $db->rejectApplication($id);
+    header("Location: view_applications.php"); exit();
 }
 
-// --- Fetch all applications with tenant & apartment info ---
-$stmt = $conn->prepare("
-    SELECT a.application_id, a.status as app_status, a.date_applied, 
-           t.firstname, t.lastname, t.username as tenant_username,
-           p.Name as apartment_name, p.Location
-    FROM applications a
-    JOIN tenants t ON a.tenant_id = t.tenant_id
-    JOIN apartments p ON a.apartment_id = p.ApartmentID
-    ORDER BY a.date_applied DESC
-");
-$stmt->execute();
-$applications = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$applications = $db->getAllApplications();
 ?>
+<!-- HTML table remains the same -->
+
+
 
 <!DOCTYPE html>
 <html lang="en">

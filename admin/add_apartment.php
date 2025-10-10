@@ -15,30 +15,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $location = trim($_POST['location']);
     $description = trim($_POST['description']);
     $monthly_rate = trim($_POST['monthly_rate']);
-    $status = 'Available';
-
-    // Handle image upload
     $image = null;
+
     if (isset($_FILES['image']) && $_FILES['image']['error'] == 0) {
         $ext = pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION);
         $image = 'uploads/' . uniqid() . '.' . $ext;
         move_uploaded_file($_FILES['image']['tmp_name'], '../' . $image);
     }
 
-    $conn = $db->connect();
-    $stmt = $conn->prepare("INSERT INTO apartments (Name, Type, Location, Description, MonthlyRate, Image, Status) VALUES (:name, :type, :location, :description, :rate, :image, :status)");
-    $stmt->bindParam(':name', $name);
-    $stmt->bindParam(':type', $type);
-    $stmt->bindParam(':location', $location);
-    $stmt->bindParam(':description', $description);
-    $stmt->bindParam(':rate', $monthly_rate);
-    $stmt->bindParam(':image', $image);
-    $stmt->bindParam(':status', $status);
-    $stmt->execute();
-
+    $db->addApartment($name, $type, $location, $description, $monthly_rate, $image);
     echo "<script>alert('Apartment added successfully!'); window.location.href='dashboard.php';</script>";
 }
 ?>
+
+
+
 
 <!-- HTML Form -->
 <!DOCTYPE html>

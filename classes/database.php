@@ -7,252 +7,321 @@ class Database {
     private $conn;
 
     public function connect() {
-        $this->conn = null;
-        try {
-            $this->conn = new PDO("mysql:host={$this->host};dbname={$this->db_name}", $this->username, $this->password);
-            $this->conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        } catch (PDOException $e) {
-            echo "Connection Error: " . $e->getMessage();
+        if ($this->conn === null) {
+            try {
+                $this->conn = new PDO("mysql:host=$this->host;dbname=$this->db_name;charset=utf8", $this->username, $this->password);
+                $this->conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            } catch (PDOException $e) {
+                die("Database connection failed: " . $e->getMessage());
+            }
         }
         return $this->conn;
     }
 
-    // ✅ Tenant Registration
-    public function registerTenant($firstname, $lastname, $username, $email, $phone, $password, $confirm_password) {
-        if ($password !== $confirm_password) {
-            return "Passwords do not match.";
-        }
-
-        $conn = $this->connect();
-        $check = $conn->prepare("SELECT * FROM tenants WHERE username = :username OR email = :email");
-        $check->bindParam(':username', $username);
-        $check->bindParam(':email', $email);
-        $check->execute();
-
-        if ($check->rowCount() > 0) {
-            return "Username or email already exists.";
-        }
-
-        $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-        $stmt = $conn->prepare("INSERT INTO tenants (firstname, lastname, username, email, phone, password)
-                                VALUES (:firstname, :lastname, :username, :email, :phone, :password)");
-        $stmt->bindParam(':firstname', $firstname);
-        $stmt->bindParam(':lastname', $lastname);
-        $stmt->bindParam(':username', $username);
-        $stmt->bindParam(':email', $email);
-        $stmt->bindParam(':phone', $phone);
-        $stmt->bindParam(':password', $hashed_password);
-
-        return $stmt->execute() ? true : "Registration failed.";
-    }
-
-    // ✅ Unified Login (Tenant or Admin)
-    public function loginUser($username, $password, $role) {
-    $conn = $this->connect();
-
-    // Piliin ang tamang table depende sa role
-    if ($role === "tenant") {
-        $stmt = $conn->prepare("SELECT * FROM tenants WHERE username = :username OR email = :username LIMIT 1");
-    } else {
-        $stmt = $conn->prepare("SELECT * FROM admins WHERE username = :username OR email = :username LIMIT 1");
-    }
-
-    $stmt->bindParam(":username", $username);
-    $stmt->execute();
-
-    if ($stmt->rowCount() > 0) {
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if (password_verify($password, $user['password'])) {
-            session_start();
-
-            if ($role === "tenant") {
-                $_SESSION['user_id'] = $user['tenant_id'];
-                $_SESSION['username'] = $user['username'];
-                $_SESSION['fullname'] = $user['firstname'] . " " . $user['lastname'];
-                $_SESSION['role'] = 'tenant';
-                return "tenant";
-            } else {
-                $_SESSION['user_id'] = $user['admin_id'];
-                $_SESSION['username'] = $user['username'];
-                $_SESSION['fullname'] = $user['fullname'];
-                $_SESSION['role'] = 'admin';
-                return "admin";
-            }
-        } else {
-            return "Incorrect password.";
-        }
-    } else {
-        return "Account not found.";
-    }
-}
-
-
-    // ✅ Logout
-   public function logout() {
-    session_start();
-    session_unset();
-    session_destroy();
-    header("Location: /ahub/index.php");
-    exit();
-}
-
-
-    // ✅ Get Tenant Info
-    public function getTenantInfo($tenant_id) {
-        $conn = $this->connect();
-        $stmt = $conn->prepare("SELECT * FROM tenants WHERE tenant_id = :tenant_id");
-        $stmt->bindParam(':tenant_id', $tenant_id);
+    // ===========================
+    // Admin Functions
+    // ===========================
+    public function getAdminById($id) {
+        $stmt = $this->connect()->prepare("SELECT * FROM admins WHERE admin_id = :id LIMIT 1");
+        $stmt->bindParam(':id', $id);
         $stmt->execute();
         return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
-    // --- Add Apartment ---
-public function addApartment($name, $type, $location, $description, $rate, $imagePath) {
-    $conn = $this->connect();
-    $stmt = $conn->prepare("INSERT INTO apartments (Name, Type, Location, Description, MonthlyRate, Image)
-                            VALUES (:name, :type, :location, :description, :rate, :image)");
-    $stmt->bindParam(':name', $name);
-    $stmt->bindParam(':type', $type);
-    $stmt->bindParam(':location', $location);
-    $stmt->bindParam(':description', $description);
-    $stmt->bindParam(':rate', $rate);
-    $stmt->bindParam(':image', $imagePath);
-    return $stmt->execute();
-}
-
-// --- Get All Apartments (for index / tenant dashboard) ---
-public function getAllApartments() {
-    $conn = $this->connect();
-    $stmt = $conn->query("SELECT * FROM apartments ORDER BY DateAdded DESC");
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
-}
-
-// --- Tenant Apply for Apartment ---
-// --- Tenant Apply for Apartment ---
-public function applyApartment($tenant_id, $apartment_id) {
-    $conn = $this->connect();
-
-    // 1️⃣ Check if apartment exists and is available
-    $stmt = $conn->prepare("SELECT Status FROM apartments WHERE ApartmentID = :apt_id LIMIT 1");
-    $stmt->bindParam(':apt_id', $apartment_id);
-    $stmt->execute();
-    $apt = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    if (!$apt) {
-        return "Apartment not found.";
+    public function getAdminByUsername($username) {
+        $stmt = $this->connect()->prepare("SELECT * FROM admins WHERE username = :u LIMIT 1");
+        $stmt->bindParam(':u', $username);
+        $stmt->execute();
+        return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
-    if ($apt['Status'] !== 'Available') {
-        return "This apartment is not available.";
+    public function updateAdminPassword($admin_id, $new_password) {
+        $hashed = password_hash($new_password, PASSWORD_DEFAULT);
+        $stmt = $this->connect()->prepare("UPDATE admins SET password = :p WHERE admin_id = :id");
+        $stmt->bindParam(':p', $hashed);
+        $stmt->bindParam(':id', $admin_id);
+        return $stmt->execute();
     }
 
-    // 2️⃣ Check if tenant already applied or already approved
-    $stmt = $conn->prepare("
-        SELECT * FROM applications 
-        WHERE tenant_id = :tenant_id AND apartment_id = :apt_id AND status IN ('Pending','Approved')
-    ");
-    $stmt->bindParam(':tenant_id', $tenant_id);
-    $stmt->bindParam(':apt_id', $apartment_id);
-    $stmt->execute();
-
-    if ($stmt->rowCount() > 0) {
-        return "You have already applied for this apartment.";
+    public function changeAdminPassword($admin_id, $new_password) {
+        return $this->updateAdminPassword($admin_id, $new_password);
     }
 
-    // 3️⃣ Insert new application
-    $stmt = $conn->prepare("
-        INSERT INTO applications (tenant_id, apartment_id, status, date_applied)
-        VALUES (:tenant_id, :apt_id, 'Pending', NOW())
-    ");
-    $stmt->bindParam(':tenant_id', $tenant_id);
-    $stmt->bindParam(':apt_id', $apartment_id);
+    public function checkAdminExists($username) {
+        $stmt = $this->connect()->prepare("SELECT * FROM admins WHERE username=:u LIMIT 1");
+        $stmt->bindParam(':u', $username);
+        $stmt->execute();
+        return $stmt->fetch(PDO::FETCH_ASSOC) ? true : false;
+    }
 
-    return $stmt->execute() ? true : "Failed to submit application.";
-}
+    public function registerAdmin($firstname, $lastname, $username, $password) {
+        if ($this->checkAdminExists($username)) return "Username already exists.";
+        $hashed = password_hash($password, PASSWORD_DEFAULT);
+        $stmt = $this->connect()->prepare("INSERT INTO admins (firstname, lastname, username, password) VALUES (:fn,:ln,:u,:p)");
+        $stmt->bindParam(':fn', $firstname);
+        $stmt->bindParam(':ln', $lastname);
+        $stmt->bindParam(':u', $username);
+        $stmt->bindParam(':p', $hashed);
+        return $stmt->execute() ? true : "Failed to register admin.";
+    }
 
+    // Approve / Reject applications
+    public function approveApplication($application_id) {
+        return $this->updateApplicationStatus($application_id, 'Approved');
+    }
 
-// --- Admin Get All Applications ---
-public function getAllApplications() {
-    $conn = $this->connect();
-    $stmt = $conn->query("
-        SELECT a.application_id, t.firstname, t.lastname, ap.Name AS apartment_name,
-               a.status, a.date_applied
-        FROM applications a
-        JOIN tenants t ON a.tenant_id = t.tenant_id
-        JOIN apartments ap ON a.apartment_id = ap.ApartmentID
-        ORDER BY a.date_applied DESC
-    ");
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
-}
+    public function rejectApplication($application_id) {
+        return $this->updateApplicationStatus($application_id, 'Rejected');
+    }
 
-// --- Update Application Status (Approve / Reject) ---
-public function updateApplicationStatus($application_id, $status) {
-    $conn = $this->connect();
-    $stmt = $conn->prepare("UPDATE applications SET status = :status WHERE application_id = :id");
-    $stmt->bindParam(':status', $status);
-    $stmt->bindParam(':id', $application_id);
-    return $stmt->execute();
-}
+    // ===========================
+    // Tenant Functions
+    // ===========================
+    public function getTenantProfile($tenant_id) {
+        $stmt = $this->connect()->prepare("SELECT * FROM tenants WHERE tenant_id = :id LIMIT 1");
+        $stmt->bindParam(':id', $tenant_id);
+        $stmt->execute();
+        return $stmt->fetch(PDO::FETCH_ASSOC);
+    }
 
-public function getAvailableApartments($tenant_id) {
-    $conn = $this->connect();
+    public function getAllTenants() {
+        $stmt = $this->connect()->prepare("SELECT * FROM tenants ORDER BY created_at DESC");
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 
-    $stmt = $conn->prepare("
-        SELECT * FROM apartments 
-        WHERE Status = 'Available'
-        AND ApartmentID NOT IN (
-            SELECT apartment_id FROM applications 
-            WHERE tenant_id = :tenant_id AND status IN ('Pending','Approved')
-        )
-        ORDER BY DateAdded DESC
-    ");
-    $stmt->bindParam(':tenant_id', $tenant_id);
-    $stmt->execute();
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
-}
+    public function deleteTenant($tenant_id) {
+        $stmt = $this->connect()->prepare("DELETE FROM tenants WHERE tenant_id = :id");
+        $stmt->bindParam(':id', $tenant_id);
+        return $stmt->execute();
+    }
 
+    public function updateTenantProfile($tenant_id, $firstname, $lastname, $username, $email, $phone, $password = '', $confirm = '') {
+        if ($password !== '') {
+            if ($password !== $confirm) return "Passwords do not match.";
+            $hashed = password_hash($password, PASSWORD_DEFAULT);
+            $stmt = $this->connect()->prepare("
+                UPDATE tenants SET firstname=:fn, lastname=:ln, username=:u, email=:e, phone=:ph, password=:p
+                WHERE tenant_id=:id
+            ");
+            $stmt->bindParam(':p', $hashed);
+        } else {
+            $stmt = $this->connect()->prepare("
+                UPDATE tenants SET firstname=:fn, lastname=:ln, username=:u, email=:e, phone=:ph
+                WHERE tenant_id=:id
+            ");
+        }
+        $stmt->bindParam(':fn', $firstname);
+        $stmt->bindParam(':ln', $lastname);
+        $stmt->bindParam(':u', $username);
+        $stmt->bindParam(':e', $email);
+        $stmt->bindParam(':ph', $phone);
+        $stmt->bindParam(':id', $tenant_id);
 
-public function getTenantLeases($tenant_id) {
-    $conn = $this->connect();
+        return $stmt->execute() ? true : "Failed to update profile.";
+    }
 
-    $stmt = $conn->prepare("
-        SELECT l.lease_id, l.start_date, l.end_date, 
-               a.Name AS apartment_name, a.Location, a.MonthlyRate
-        FROM leases l
-        JOIN apartments a ON l.apartment_id = a.ApartmentID
-        WHERE l.tenant_id = :tenant_id
-        ORDER BY l.start_date DESC
-    ");
-    $stmt->bindParam(':tenant_id', $tenant_id);
-    $stmt->execute();
+    public function countTenants() {
+        $stmt = $this->connect()->query("SELECT COUNT(*) as cnt FROM tenants");
+        return $stmt->fetch(PDO::FETCH_ASSOC)['cnt'] ?? 0;
+    }
 
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
-}
+    public function registerTenant($firstname, $lastname, $username, $email, $phone, $password) {
+        $stmt = $this->connect()->prepare("SELECT * FROM tenants WHERE username=:u OR email=:e LIMIT 1");
+        $stmt->bindParam(':u', $username);
+        $stmt->bindParam(':e', $email);
+        $stmt->execute();
+        if ($stmt->fetch()) return "Username or email already exists.";
 
-// --- Add Lease when application is approved
-// --- Add Lease for Tenant ---
-public function createLease($tenant_id, $apartment_id, $start_date = null, $end_date = null) {
-    $conn = $this->connect();
+        $hashed = password_hash($password, PASSWORD_DEFAULT);
+        $stmt = $this->connect()->prepare("INSERT INTO tenants (firstname, lastname, username, email, phone, password) VALUES (:fn,:ln,:u,:e,:ph,:p)");
+        $stmt->bindParam(':fn', $firstname);
+        $stmt->bindParam(':ln', $lastname);
+        $stmt->bindParam(':u', $username);
+        $stmt->bindParam(':e', $email);
+        $stmt->bindParam(':ph', $phone);
+        $stmt->bindParam(':p', $hashed);
+        return $stmt->execute() ? true : "Failed to register tenant.";
+    }
 
-    // Default: lease starts today and lasts 1 year if not provided
-    if (!$start_date) $start_date = date('Y-m-d');
-    if (!$end_date) $end_date = date('Y-m-d', strtotime('+1 year'));
+    public function loginUser($username, $password) {
+        $stmt = $this->connect()->prepare("SELECT * FROM tenants WHERE username=:u LIMIT 1");
+        $stmt->bindParam(':u', $username);
+        $stmt->execute();
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($user && password_verify($password, $user['password'])) return $user;
+        return false;
+    }
 
-    $stmt = $conn->prepare("
-        INSERT INTO leases (tenant_id, apartment_id, start_date, end_date)
-        VALUES (:tenant_id, :apartment_id, :start_date, :end_date)
-    ");
-    $stmt->bindParam(':tenant_id', $tenant_id);
-    $stmt->bindParam(':apartment_id', $apartment_id);
-    $stmt->bindParam(':start_date', $start_date);
-    $stmt->bindParam(':end_date', $end_date);
+    // ===========================
+    // Apartment Functions
+    // ===========================
+    public function addApartment($name, $type, $location, $description, $monthly_rate, $image, $status='Available') {
+        $stmt = $this->connect()->prepare("INSERT INTO apartments (Name, Type, Location, Description, MonthlyRate, Image, Status) 
+                                           VALUES (:name, :type, :location, :description, :rate, :image, :status)");
+        $stmt->bindParam(':name', $name);
+        $stmt->bindParam(':type', $type);
+        $stmt->bindParam(':location', $location);
+        $stmt->bindParam(':description', $description);
+        $stmt->bindParam(':rate', $monthly_rate);
+        $stmt->bindParam(':image', $image);
+        $stmt->bindParam(':status', $status);
+        return $stmt->execute();
+    }
 
-    return $stmt->execute();
-}
+    public function getAllApartments() {
+        $stmt = $this->connect()->prepare("SELECT * FROM apartments ORDER BY Name ASC");
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 
+    public function getAvailableApartments($tenant_id) {
+        $stmt = $this->connect()->prepare("
+            SELECT * FROM apartments
+            WHERE Status='Available' 
+            AND ApartmentID NOT IN (
+                SELECT apartment_id FROM applications WHERE tenant_id=:tid
+                UNION
+                SELECT apartment_id FROM leases WHERE tenant_id=:tid
+            )
+            ORDER BY Name ASC
+        ");
+        $stmt->bindParam(':tid', $tenant_id);
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 
+    public function updateApartmentStatus($apartment_id, $status) {
+        $stmt = $this->connect()->prepare("UPDATE apartments SET Status = :status WHERE ApartmentID = :id");
+        $stmt->bindParam(':status', $status);
+        $stmt->bindParam(':id', $apartment_id);
+        return $stmt->execute();
+    }
 
+    public function countApartments() {
+        $stmt = $this->connect()->query("SELECT COUNT(*) as cnt FROM apartments");
+        return $stmt->fetch(PDO::FETCH_ASSOC)['cnt'] ?? 0;
+    }
 
+    // ===========================
+    // Application Functions
+    // ===========================
+    public function applyApartment($tenant_id, $apartment_id) {
+        $stmt = $this->connect()->prepare("SELECT * FROM applications WHERE tenant_id=:tid AND apartment_id=:aid LIMIT 1");
+        $stmt->bindParam(':tid', $tenant_id);
+        $stmt->bindParam(':aid', $apartment_id);
+        $stmt->execute();
+        if ($stmt->fetch()) return "You have already applied for this apartment.";
+
+        $stmt = $this->connect()->prepare("INSERT INTO applications (tenant_id, apartment_id, status, date_applied) VALUES (:tid, :aid, 'Pending', NOW())");
+        $stmt->bindParam(':tid', $tenant_id);
+        $stmt->bindParam(':aid', $apartment_id);
+        return $stmt->execute() ? true : "Failed to submit application.";
+    }
+
+    public function getAllApplications() {
+        $stmt = $this->connect()->prepare("
+            SELECT a.application_id, a.status as app_status, a.date_applied, 
+                   t.firstname, t.lastname, t.username as tenant_username,
+                   p.Name as apartment_name, p.Location, a.tenant_id, a.apartment_id
+            FROM applications a
+            JOIN tenants t ON a.tenant_id = t.tenant_id
+            JOIN apartments p ON a.apartment_id = p.ApartmentID
+            ORDER BY a.date_applied DESC
+        ");
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function getTenantApplications($tenant_id) {
+        $stmt = $this->connect()->prepare("
+            SELECT a.*, p.Name as apartment_name, p.Location
+            FROM applications a
+            JOIN apartments p ON a.apartment_id = p.ApartmentID
+            WHERE a.tenant_id=:tid
+            ORDER BY a.date_applied DESC
+        ");
+        $stmt->bindParam(':tid', $tenant_id);
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function updateApplicationStatus($application_id, $status) {
+        $stmt = $this->connect()->prepare("UPDATE applications SET status = :status WHERE application_id = :id");
+        $stmt->bindParam(':status', $status);
+        $stmt->bindParam(':id', $application_id);
+        return $stmt->execute();
+    }
+
+    public function countApplications() {
+        $stmt = $this->connect()->query("SELECT COUNT(*) as cnt FROM applications");
+        return $stmt->fetch(PDO::FETCH_ASSOC)['cnt'] ?? 0;
+    }
+
+    // ===========================
+    // Lease Functions
+    // ===========================
+    public function getAllLeases() {
+        $stmt = $this->connect()->prepare("
+            SELECT l.lease_id, l.start_date, l.end_date, 
+                   t.firstname, t.lastname, t.username AS tenant_username,
+                   p.Name AS apartment_name, p.Location, p.MonthlyRate
+            FROM leases l
+            JOIN tenants t ON l.tenant_id = t.tenant_id
+            JOIN apartments p ON l.apartment_id = p.ApartmentID
+            ORDER BY l.start_date DESC
+        ");
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function getTenantLeases($tenant_id) {
+        $stmt = $this->connect()->prepare("
+            SELECT l.*, p.Name as apartment_name, p.Location, p.MonthlyRate
+            FROM leases l
+            JOIN apartments p ON l.apartment_id = p.ApartmentID
+            WHERE l.tenant_id=:tid
+            ORDER BY l.start_date DESC
+        ");
+        $stmt->bindParam(':tid', $tenant_id);
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function createLease($tenant_id, $apartment_id, $duration_months = 12) {
+        $start_date = date('Y-m-d');
+        $end_date = date('Y-m-d', strtotime("+$duration_months months"));
+
+        $stmt = $this->connect()->prepare("
+            INSERT INTO leases (tenant_id, apartment_id, start_date, end_date)
+            VALUES (:tenant, :apartment, :start, :end)
+        ");
+        $stmt->bindParam(':tenant', $tenant_id);
+        $stmt->bindParam(':apartment', $apartment_id);
+        $stmt->bindParam(':start', $start_date);
+        $stmt->bindParam(':end', $end_date);
+        return $stmt->execute();
+    }
+
+    public function countLeases() {
+        $stmt = $this->connect()->query("SELECT COUNT(*) as cnt FROM leases");
+        return $stmt->fetch(PDO::FETCH_ASSOC)['cnt'] ?? 0;
+    }
+
+    // ===========================
+    // Notifications Functions
+    // ===========================
+    public function getNotifications($tenant_id) {
+        $stmt = $this->connect()->prepare("SELECT * FROM notifications WHERE tenant_id=:tid ORDER BY created_at DESC");
+        $stmt->bindParam(':tid', $tenant_id);
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public function markNotificationsRead($tenant_id) {
+        $stmt = $this->connect()->prepare("UPDATE notifications SET status='Read' WHERE tenant_id=:tid AND status='Unread'");
+        $stmt->bindParam(':tid', $tenant_id);
+        return $stmt->execute();
+    }
 }
 ?>

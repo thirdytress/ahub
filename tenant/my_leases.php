@@ -8,19 +8,10 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'tenant') {
 }
 
 $db = new Database();
-$conn = $db->connect();
-
 $tenant_id = $_SESSION['user_id'];
 
-$query = "SELECT l.LeaseID, a.ApartmentName, a.Location, a.MonthlyRate, l.StartDate, l.EndDate
-          FROM leases l
-          JOIN apartments a ON l.ApartmentID = a.ApartmentID
-          WHERE l.TenantID = :tenant_id
-          ORDER BY l.StartDate DESC";
-$stmt = $conn->prepare($query);
-$stmt->bindParam(':tenant_id', $tenant_id);
-$stmt->execute();
-$leases = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// 🔹 Use centralized function
+$leases = $db->getTenantLeases($tenant_id);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -64,7 +55,7 @@ $leases = $stmt->fetchAll(PDO::FETCH_ASSOC);
   <div class="card p-4">
     <h3 class="text-primary mb-4"><i class="bi bi-house-door me-2"></i>My Leases</h3>
 
-    <?php if (count($leases) > 0): ?>
+    <?php if (!empty($leases)): ?>
       <div class="table-responsive">
         <table class="table table-hover align-middle">
           <thead class="table-light">
@@ -81,11 +72,11 @@ $leases = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <?php foreach ($leases as $index => $lease): ?>
               <tr>
                 <td><?= $index + 1 ?></td>
-                <td><?= htmlspecialchars($lease['ApartmentName']) ?></td>
+                <td><?= htmlspecialchars($lease['apartment_name']) ?></td>
                 <td><?= htmlspecialchars($lease['Location']) ?></td>
                 <td>₱<?= number_format($lease['MonthlyRate'], 2) ?></td>
-                <td><?= date('M d, Y', strtotime($lease['StartDate'])) ?></td>
-                <td><?= date('M d, Y', strtotime($lease['EndDate'])) ?></td>
+                <td><?= date('M d, Y', strtotime($lease['start_date'])) ?></td>
+                <td><?= date('M d, Y', strtotime($lease['end_date'])) ?></td>
               </tr>
             <?php endforeach; ?>
           </tbody>

@@ -2,32 +2,29 @@
 session_start();
 require_once "../classes/database.php";
 
-$db = new Database();
-
-// --- require admin session ---
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
     header("Location: ../index.php");
     exit();
 }
 
-// --- get fullname ---
+$db = new Database();
+
+// --- get admin fullname dynamically ---
 $fullname = $_SESSION['fullname'] ?? '';
 if (empty($fullname)) {
-    try {
-        $conn = $db->connect();
-        $stmt = $conn->prepare("SELECT fullname, username FROM admins WHERE admin_id = :id LIMIT 1");
-        $stmt->bindParam(':id', $_SESSION['user_id']);
-        $stmt->execute();
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($row) {
-            $fullname = $row['fullname'];
-            $_SESSION['fullname'] = $fullname;
-            if (empty($_SESSION['username']) && !empty($row['username'])) {
-                $_SESSION['username'] = $row['username'];
-            }
-        }
-    } catch (Exception $e) {}
+    $admin = $db->getAdminById($_SESSION['user_id']);
+    if ($admin) {
+        $fullname = $admin['fullname'];
+        $_SESSION['fullname'] = $fullname;
+        $_SESSION['username'] = $admin['username'] ?? '';
+    }
 }
+
+// --- fetch counts for dashboard cards ---
+$totalTenants = $db->countTenants();
+$totalApplications = $db->countApplications();
+$totalApartments = $db->countApartments();
+$totalLeases = $db->countLeases();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -40,25 +37,20 @@ if (empty($fullname)) {
     body { background-color: #f8f9fa; font-family: 'Poppins', sans-serif; }
     .navbar { box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
     .card { border: none; border-radius: 10px; }
-
-    /* Dashboard Cards */
     .dashboard-card {
       transition: transform 0.3s ease, box-shadow 0.3s ease, background-color 0.3s ease;
       cursor: pointer;
     }
-
     .dashboard-card:hover {
       transform: translateY(-5px);
       box-shadow: 0 8px 20px rgba(0,0,0,0.2);
       background-color: #f0f8ff;
     }
-
     .dashboard-card .icon {
       font-size: 2rem;
       color: #0d6efd;
       transition: transform 0.3s ease, color 0.3s ease;
     }
-
     .dashboard-card:hover .icon {
       transform: scale(1.2);
       color: #0b5ed7;
@@ -90,7 +82,7 @@ if (empty($fullname)) {
             <i class="bi bi-people-fill icon"></i>
           </div>
           <h5>Manage Tenants</h5>
-          <p class="small text-muted">View and manage all tenant accounts.</p>
+          <p class="small text-muted"><?= $totalTenants ?> tenants</p>
           <a href="manage_tenants.php" class="btn btn-primary btn-sm mt-auto">Go</a>
         </div>
       </div>
@@ -102,7 +94,7 @@ if (empty($fullname)) {
             <i class="bi bi-file-earmark-text-fill icon"></i>
           </div>
           <h5>View Applications</h5>
-          <p class="small text-muted">Check tenant apartment applications.</p>
+          <p class="small text-muted"><?= $totalApplications ?> applications</p>
           <a href="view_applications.php" class="btn btn-outline-primary btn-sm mt-auto">Go</a>
         </div>
       </div>
@@ -114,7 +106,7 @@ if (empty($fullname)) {
             <i class="bi bi-building-fill icon"></i>
           </div>
           <h5>Add Apartment</h5>
-          <p class="small text-muted">Add new apartment listings to the system.</p>
+          <p class="small text-muted"><?= $totalApartments ?> apartments</p>
           <a href="add_apartment.php" class="btn btn-success btn-sm mt-auto">Go</a>
         </div>
       </div>
@@ -126,25 +118,24 @@ if (empty($fullname)) {
             <i class="bi bi-key-fill icon"></i>
           </div>
           <h5>Change Password</h5>
-          <p class="small text-muted">Update your account password securely.</p>
+          <p class="small text-muted">Secure your account</p>
           <a href="change_password.php" class="btn btn-warning btn-sm mt-auto">Go</a>
         </div>
       </div>
-    </div>
 
-    <!-- Leases -->
-    <div class="col-md-3 mb-3">
-    <div class="card text-center h-100 p-3 shadow-sm dashboard-card">
-      <div class="mb-2">
-        <i class="bi bi-file-text-fill icon"></i>
+      <!-- View Leases -->
+      <div class="col-md-3 mb-3">
+        <div class="card text-center h-100 p-3 shadow-sm dashboard-card">
+          <div class="mb-2">
+            <i class="bi bi-file-text-fill icon"></i>
+          </div>
+          <h5>View Leases</h5>
+          <p class="small text-muted"><?= $totalLeases ?> active leases</p>
+          <a href="view_leases.php" class="btn btn-info btn-sm mt-auto">Go</a>
+        </div>
       </div>
-      <h5>View Leases</h5>
-      <p class="small text-muted">See all active leases in the system.</p>
-      <a href="view_leases.php" class="btn btn-info btn-sm mt-auto">Go</a>
+
     </div>
-</div>
-
-
   </div>
 </div>
 
