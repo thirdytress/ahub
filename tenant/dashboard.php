@@ -8,230 +8,115 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'tenant') {
 }
 
 $db = new Database();
-$tenant = $db->getTenantInfo($_SESSION['user_id']);
-$fullname = htmlspecialchars($tenant['firstname'] . ' ' . $tenant['lastname']);
-$email = htmlspecialchars($tenant['email']);
-$phone = htmlspecialchars($tenant['phone']);
-
 $conn = $db->connect();
 
-// --- Fetch available apartments ---
-$stmt = $conn->prepare("SELECT * FROM apartments ORDER BY DateAdded DESC");
+// Fetch tenant info
+$stmt = $conn->prepare("SELECT firstname, lastname, username FROM tenants WHERE tenant_id = :id");
+$stmt->bindParam(':id', $_SESSION['user_id']);
 $stmt->execute();
-$apartments = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// --- Fetch tenant applications ---
-$stmt = $conn->prepare("
-    SELECT a.application_id, a.status as app_status, a.date_applied,
-           p.Name as apartment_name, p.Location, p.MonthlyRate
-    FROM applications a
-    JOIN apartments p ON a.apartment_id = p.ApartmentID
-    WHERE a.tenant_id = :tenant_id
-    ORDER BY a.date_applied DESC
-");
-$stmt->bindParam(':tenant_id', $_SESSION['user_id']);
-$stmt->execute();
-$applications = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-// --- Fetch tenant leases ---
-$leases = $db->getTenantLeases($_SESSION['user_id']);
-
-// --- Determine if tenant has active lease ---
-$hasActiveLease = false;
-foreach ($leases as $lease) {
-    $today = date('Y-m-d');
-    if ($today >= $lease['start_date'] && $today <= $lease['end_date']) {
-        $hasActiveLease = true;
-        break;
-    }
-}
+$tenant = $stmt->fetch(PDO::FETCH_ASSOC);
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Tenant Dashboard | ApartmentHub</title>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-<style>
-body { background-color: #f8f9fa; font-family: 'Poppins', sans-serif; }
-.navbar { box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-.card { border: none; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-</style>
+    <meta charset="UTF-8">
+    <title>Tenant Dashboard | ApartmentHub</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Poppins', sans-serif;
+        }
+        .navbar {
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .card {
+            border: none;
+            border-radius: 15px;
+            transition: transform 0.2s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .card:hover {
+            transform: scale(1.03);
+        }
+        .btn-primary {
+            border-radius: 8px;
+        }
+        .welcome {
+            margin-top: 30px;
+            margin-bottom: 40px;
+        }
+    </style>
 </head>
 <body>
 
-<!-- NAVBAR -->
-<nav class="navbar navbar-expand-lg navbar-light bg-white">
+<nav class="navbar navbar-expand-lg bg-white">
   <div class="container">
-    <a class="navbar-brand fw-bold text-primary" href="#">ApartmentHub</a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarTenant">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-    <div class="collapse navbar-collapse" id="navbarTenant">
-      <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
-        <li class="nav-item"><a class="nav-link active" href="#">Dashboard</a></li>
-        <li class="nav-item"><a class="nav-link" href="#myApplications">My Applications</a></li>
-        <li class="nav-item"><a class="nav-link" href="#myLeases">My Leases</a></li>
-        <li class="nav-item"><a class="nav-link" href="#profile">Profile</a></li>
-        <li class="nav-item"><a href="../logout.php" class="btn btn-outline-danger btn-sm ms-2">Logout</a></li>
-      </ul>
+    <a class="navbar-brand fw-bold text-primary" href="#">ApartmentHub Tenant</a>
+    <div class="d-flex">
+      <a href="../logout.php" class="btn btn-outline-danger btn-sm">Logout</a>
     </div>
   </div>
 </nav>
 
-<div class="container mt-4">
-
-  <div class="card p-4 mb-4">
-    <h3 class="text-primary">Welcome, <?= $fullname; ?>!</h3>
-    <hr>
-    <p>This is your tenant dashboard. You can browse available apartments, track your applications, and view your leases here.</p>
-
-    <div class="mt-3">
-      <a href="#availableApartments" class="btn btn-primary me-2">View Apartments</a>
-      <a href="#myApplications" class="btn btn-outline-primary me-2">My Applications</a>
-      <a href="#myLeases" class="btn btn-outline-success">My Leases</a>
+<div class="container text-center">
+    <div class="welcome">
+        <h2 class="fw-bold text-primary">
+            Welcome, <?= htmlspecialchars($tenant['firstname'] . " " . $tenant['lastname']) ?>!
+        </h2>
+        <p class="text-muted">Manage your apartment applications, leases, and profile easily.</p>
     </div>
-  </div>
 
-  <!-- AVAILABLE APARTMENTS -->
-  <div id="availableApartments" class="card p-4 mb-4">
-    <h4 class="text-secondary mb-3">Available Apartments</h4>
-    <?php if ($apartments): ?>
-      <div class="row">
-        <?php foreach ($apartments as $apt): ?>
-        <div class="col-md-4 mb-3">
-          <div class="card h-100 p-3">
-            <h5><?= htmlspecialchars($apt['Name']); ?></h5>
-            <p class="mb-1"><strong>Location:</strong> <?= htmlspecialchars($apt['Location']); ?></p>
-            <p class="mb-1"><strong>Rate:</strong> ₱<?= number_format($apt['MonthlyRate'],2); ?>/month</p>
-            <?php if ($hasActiveLease): ?>
-                <button class="btn btn-secondary btn-sm w-100" disabled>Apply Disabled (Active Lease)</button>
-            <?php else: ?>
-                <a href="apply_apartment.php?apartment_id=<?= $apt['ApartmentID']; ?>" class="btn btn-success btn-sm w-100">Apply Now</a>
-            <?php endif; ?>
-          </div>
+    <div class="row justify-content-center g-4">
+        <!-- Available Apartments -->
+        <div class="col-md-5 col-lg-3">
+            <div class="card h-100 p-3">
+                <div class="card-body">
+                    <i class="bi bi-building fs-1 text-primary"></i>
+                    <h5 class="card-title mt-3">Available Apartments</h5>
+                    <p class="text-muted">View and apply for available units.</p>
+                    <a href="view_apartments.php" class="btn btn-primary w-100">Go</a>
+                </div>
+            </div>
         </div>
-        <?php endforeach; ?>
-      </div>
-    <?php else: ?>
-      <p class="text-muted">No apartments available at the moment.</p>
-    <?php endif; ?>
-  </div>
 
-  <!-- MY APPLICATIONS -->
-  <div id="myApplications" class="card p-4 mb-4">
-    <h4 class="text-secondary mb-3">My Applications</h4>
-    <?php if ($applications): ?>
-      <div class="table-responsive">
-        <table class="table table-bordered table-hover">
-          <thead class="table-light">
-            <tr>
-              <th>#</th>
-              <th>Apartment</th>
-              <th>Location</th>
-              <th>Monthly Rate</th>
-              <th>Date Applied</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <?php foreach ($applications as $i => $app): ?>
-            <tr>
-              <td><?= $i+1 ?></td>
-              <td><?= htmlspecialchars($app['apartment_name']) ?></td>
-              <td><?= htmlspecialchars($app['Location']) ?></td>
-              <td>₱<?= number_format($app['MonthlyRate'],2) ?></td>
-              <td><?= date('M d, Y H:i', strtotime($app['date_applied'])) ?></td>
-              <td>
-                <?php if ($app['app_status'] === 'Pending'): ?>
-                  <span class="badge bg-warning text-dark">Pending</span>
-                <?php elseif ($app['app_status'] === 'Approved'): ?>
-                  <span class="badge bg-success">Approved</span>
-                <?php else: ?>
-                  <span class="badge bg-danger">Rejected</span>
-                <?php endif; ?>
-              </td>
-            </tr>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
-      </div>
-    <?php else: ?>
-      <p class="text-muted">You haven't applied to any apartments yet.</p>
-    <?php endif; ?>
-  </div>
-
-  <!-- MY LEASES -->
-  <div id="myLeases" class="card p-4 mb-4">
-    <h4 class="text-secondary mb-3">My Leases</h4>
-    <?php if ($leases): ?>
-      <div class="table-responsive">
-        <table class="table table-bordered table-hover">
-          <thead class="table-light">
-            <tr>
-              <th>#</th>
-              <th>Apartment</th>
-              <th>Location</th>
-              <th>Monthly Rate</th>
-              <th>Start Date</th>
-              <th>End Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            <?php foreach ($leases as $i => $lease): ?>
-            <tr>
-              <td><?= $i+1 ?></td>
-              <td><?= htmlspecialchars($lease['apartment_name']) ?></td>
-              <td><?= htmlspecialchars($lease['Location']) ?></td>
-              <td>₱<?= number_format($lease['MonthlyRate'],2) ?></td>
-              <td><?= date('M d, Y', strtotime($lease['start_date'])) ?></td>
-              <td><?= date('M d, Y', strtotime($lease['end_date'])) ?></td>
-            </tr>
-            <?php endforeach; ?>
-          </tbody>
-        </table>
-      </div>
-    <?php else: ?>
-      <p class="text-muted">You currently have no active leases.</p>
-    <?php endif; ?>
-  </div>
-
-  <!-- PROFILE SECTION -->
-  <div id="profile" class="card p-4">
-    <h4 class="text-secondary mb-3">My Profile</h4>
-    <form method="POST" action="update_profile.php">
-      <div class="row mb-3">
-        <div class="col-md-6">
-          <label class="form-label">Full Name</label>
-          <input type="text" class="form-control" value="<?= $fullname; ?>" readonly>
+        <!-- My Applications -->
+        <div class="col-md-5 col-lg-3">
+            <div class="card h-100 p-3">
+                <div class="card-body">
+                    <i class="bi bi-file-earmark-text fs-1 text-success"></i>
+                    <h5 class="card-title mt-3">My Applications</h5>
+                    <p class="text-muted">Check the status of your applications.</p>
+                    <a href="my_applications.php" class="btn btn-primary w-100">Go</a>
+                </div>
+            </div>
         </div>
-        <div class="col-md-6">
-          <label class="form-label">Username</label>
-          <input type="text" class="form-control" value="<?= htmlspecialchars($tenant['username']); ?>" readonly>
+
+        <!-- My Leases -->
+        <div class="col-md-5 col-lg-3">
+            <div class="card h-100 p-3">
+                <div class="card-body">
+                    <i class="bi bi-key fs-1 text-warning"></i>
+                    <h5 class="card-title mt-3">My Leases</h5>
+                    <p class="text-muted">View your current apartment lease details.</p>
+                    <a href="my_leases.php" class="btn btn-primary w-100">Go</a>
+                </div>
+            </div>
         </div>
-      </div>
 
-      <div class="row mb-3">
-        <div class="col-md-6">
-          <label class="form-label">Email</label>
-          <input type="email" name="email" class="form-control" value="<?= $email; ?>" required>
+        <!-- Update Profile -->
+        <div class="col-md-5 col-lg-3">
+            <div class="card h-100 p-3">
+                <div class="card-body">
+                    <i class="bi bi-person-circle fs-1 text-info"></i>
+                    <h5 class="card-title mt-3">Update Profile</h5>
+                    <p class="text-muted">Edit your contact details and password.</p>
+                    <a href="update_profile_form.php" class="btn btn-primary w-100">Go</a>
+                </div>
+            </div>
         </div>
-        <div class="col-md-6">
-          <label class="form-label">Phone</label>
-          <input type="text" name="phone" class="form-control" value="<?= $phone; ?>" required>
-        </div>
-      </div>
-
-      <div class="mb-3">
-        <label class="form-label">New Password (optional)</label>
-        <input type="password" name="password" class="form-control" placeholder="Enter new password if you want to change">
-      </div>
-
-      <button type="submit" class="btn btn-success">Update Profile</button>
-    </form>
-  </div>
-
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
