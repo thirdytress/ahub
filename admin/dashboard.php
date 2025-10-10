@@ -10,15 +10,21 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') {
 $db = new Database();
 
 // --- get admin fullname dynamically ---
+// --- get admin fullname dynamically ---
 $fullname = $_SESSION['fullname'] ?? '';
-if (empty($fullname)) {
-    $admin = $db->getAdminById($_SESSION['user_id']);
+$username = $_SESSION['username'] ?? '';
+
+if (empty($fullname) && !empty($username)) {
+    $admin = $db->getAdminByUsername($username); // call the function
     if ($admin) {
-        $fullname = $admin['fullname'];
+        // Combine first and last name
+        $fullname = trim($admin['firstname'] . ' ' . $admin['lastname']);
         $_SESSION['fullname'] = $fullname;
         $_SESSION['username'] = $admin['username'] ?? '';
     }
 }
+
+
 
 // --- fetch counts for dashboard cards ---
 $totalTenants = $db->countTenants();
