@@ -54,16 +54,24 @@ class Database {
         return $stmt->fetch(PDO::FETCH_ASSOC) ? true : false;
     }
 
-    public function registerAdmin($firstname, $lastname, $username, $password) {
-        if ($this->checkAdminExists($username)) return "Username already exists.";
-        $hashed = password_hash($password, PASSWORD_DEFAULT);
-        $stmt = $this->connect()->prepare("INSERT INTO admins (firstname, lastname, username, password) VALUES (:fn,:ln,:u,:p)");
-        $stmt->bindParam(':fn', $firstname);
-        $stmt->bindParam(':ln', $lastname);
-        $stmt->bindParam(':u', $username);
-        $stmt->bindParam(':p', $hashed);
-        return $stmt->execute() ? true : "Failed to register admin.";
-    }
+   public function registerAdmin($firstname, $lastname, $username, $password, $confirm) {
+    if ($password !== $confirm) return "Passwords do not match.";
+
+    if ($this->checkAdminExists($username)) return "Admin username already exists.";
+
+    $hashed = password_hash($password, PASSWORD_DEFAULT);
+    $stmt = $this->connect()->prepare("
+        INSERT INTO admins (firstname, lastname, username, password)
+        VALUES (:fn, :ln, :u, :p)
+    ");
+    $stmt->bindParam(':fn', $firstname);
+    $stmt->bindParam(':ln', $lastname);
+    $stmt->bindParam(':u', $username);
+    $stmt->bindParam(':p', $hashed);
+
+    return $stmt->execute() ? true : "Failed to register admin.";
+}
+
 
     // Approve / Reject applications
     public function approveApplication($application_id) {
@@ -126,32 +134,28 @@ class Database {
         return $stmt->fetch(PDO::FETCH_ASSOC)['cnt'] ?? 0;
     }
 
-    public function registerTenant($firstname, $lastname, $username, $email, $phone, $password) {
-        $stmt = $this->connect()->prepare("SELECT * FROM tenants WHERE username=:u OR email=:e LIMIT 1");
-        $stmt->bindParam(':u', $username);
-        $stmt->bindParam(':e', $email);
-        $stmt->execute();
-        if ($stmt->fetch()) return "Username or email already exists.";
+    
 
-        $hashed = password_hash($password, PASSWORD_DEFAULT);
-        $stmt = $this->connect()->prepare("INSERT INTO tenants (firstname, lastname, username, email, phone, password) VALUES (:fn,:ln,:u,:e,:ph,:p)");
-        $stmt->bindParam(':fn', $firstname);
-        $stmt->bindParam(':ln', $lastname);
-        $stmt->bindParam(':u', $username);
-        $stmt->bindParam(':e', $email);
-        $stmt->bindParam(':ph', $phone);
-        $stmt->bindParam(':p', $hashed);
-        return $stmt->execute() ? true : "Failed to register tenant.";
-    }
+    public function loginUser($username, $password, $role = 'tenant') {
+    $table = ($role === 'admin') ? 'admins' : 'tenants';
+    $idCol = ($role === 'admin') ? 'admin_id' : 'tenant_id';
 
-    public function loginUser($username, $password) {
-        $stmt = $this->connect()->prepare("SELECT * FROM tenants WHERE username=:u LIMIT 1");
-        $stmt->bindParam(':u', $username);
-        $stmt->execute();
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($user && password_verify($password, $user['password'])) return $user;
-        return false;
-    }
+    $stmt = $this->connect()->prepare("SELECT * FROM $table WHERE username = :u LIMIT 1");
+    $stmt->bindParam(':u', $username);
+    $stmt->execute();
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$user) return "Username not found.";
+    if (!password_verify($password, $user['password'])) return "Incorrect password.";
+
+    // Set session
+    if (session_status() === PHP_SESSION_NONE) session_start();
+    $_SESSION['user_id'] = $user[$idCol];
+    $_SESSION['fullname'] = $user['firstname'] . ' ' . $user['lastname'];
+    $_SESSION['role'] = $role;
+
+    return $role;
+}
 
     // ===========================
     // Apartment Functions
@@ -323,5 +327,44 @@ class Database {
         $stmt->bindParam(':tid', $tenant_id);
         return $stmt->execute();
     }
+
+// ===========================
+// Authentication Functions
+// ===========================
+
+
+public function registerTenant($firstname, $lastname, $username, $email, $phone, $password, $confirm) {
+    if ($password !== $confirm) return "Passwords do not match.";
+
+    // Check username/email
+    $stmt = $this->connect()->prepare("SELECT * FROM tenants WHERE username=:u OR email=:e LIMIT 1");
+    $stmt->bindParam(':u', $username);
+    $stmt->bindParam(':e', $email);
+    $stmt->execute();
+    if ($stmt->fetch()) return "Username or Email already exists.";
+
+    // Insert tenant
+    $hashed = password_hash($password, PASSWORD_DEFAULT);
+    $stmt = $this->connect()->prepare("
+        INSERT INTO tenants (firstname, lastname, username, email, phone, password)
+        VALUES (:fn, :ln, :u, :e, :ph, :p)
+    ");
+    $stmt->bindParam(':fn', $firstname);
+    $stmt->bindParam(':ln', $lastname);
+    $stmt->bindParam(':u', $username);
+    $stmt->bindParam(':e', $email);
+    $stmt->bindParam(':ph', $phone);
+    $stmt->bindParam(':p', $hashed);
+
+    return $stmt->execute() ? true : "Failed to register tenant.";
+}
+
+
+public function logout() {
+    if (session_status() === PHP_SESSION_NONE) session_start();
+    session_unset();
+    session_destroy();
+}
+
 }
 ?>

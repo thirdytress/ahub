@@ -10,23 +10,29 @@ if (!isset($_GET['key']) || $_GET['key'] !== $secretKey) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fullname = trim($_POST['fullname']);
     $username = trim($_POST['username']);
-    $email = trim($_POST['email']);
     $password = trim($_POST['password']);
     $confirm = trim($_POST['confirm']);
 
+    $names = explode(" ", $fullname, 2);
+    $firstname = $names[0];
+    $lastname = $names[1] ?? '';
+
     if ($password !== $confirm) {
         echo "<script>alert('Passwords do not match!');</script>";
-    } elseif ($db->checkAdminExists($username, $email)) {
-        echo "<script>alert('Username or email already exists!');</script>";
+    } elseif ($db->checkAdminExists($username)) {
+        echo "<script>alert('Username already exists!');</script>";
     } else {
-        $hashed = password_hash($password, PASSWORD_DEFAULT);
-        if ($db->registerAdmin($fullname, $username, $email, $hashed)) {
+        // Call registerAdmin with correct parameters
+        $result = $db->registerAdmin($firstname, $lastname, $username, $password, $confirm);
+
+        if ($result === true) {
             echo "<script>alert('Admin registered successfully!'); window.location.href='dashboard.php';</script>";
         } else {
-            echo "<script>alert('Registration failed. Try again.');</script>";
+            echo "<script>alert('$result');</script>";
         }
     }
 }
+
 ?>
 <!-- HTML form remains the same -->
 
